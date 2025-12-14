@@ -42,17 +42,17 @@ function randombytes (a) {
 
 ntru_logq = 13
 ntru_n = 701
-ntru_q = 1 << ntru_logq
 ntru_deg = ntru_n - 1
-ntru_deg5 = ntru_deg / 5
 ntru_deg8 = ntru_deg / 8
+ntru_deg5 = ntru_deg / 5
 sample_bytes = ntru_deg * 2
+ntru_q = 1 << ntru_logq
 trinary_bytes = uint16_t((ntru_deg + 4) / 5)
 private_bytes = trinary_bytes * 2
 public_bytes = uint16_t((ntru_logq * ntru_deg + 7) / 8)
+secret_bytes = private_bytes + public_bytes + 32
 cipher_bytes = public_bytes
 shared_bytes = 32
-secret_bytes = private_bytes + public_bytes + shared_bytes
 
 function modq (x) {
   return x & (ntru_q - 1)
@@ -69,51 +69,50 @@ function poly_z3_to_zq (r) {
 }
 
 function poly_trinary_zq_to_z3 (r) {
-  for (let i = 0; i < ntru_n; i++) {
-    r[i] = modq(r[i])
-    r[i] = 3 & (r[i] ^ (r[i] >> (ntru_logq - 1)))
+  for (let i = 0, j; i < ntru_n; i++) {
+    j = modq(r[i])
+    r[i] = 3 & (j ^ (j >> (ntru_logq - 1)))
   }
 }
 
 function both_negative_mask (x, y) {
-  return int16_t((int16_t(x) & int16_t(y)) >> 15)
+  return (int16_t(x) & int16_t(y)) >> 15
 }
 
 function poly_r2_inv (r, a) {
   const f = poly(), g = poly(), v = poly(), w = poly()
-  let d = 1, h, i, j, k, t, u = ntru_n - 2
+  let d = 1, e, h, i, j, l, t, u = ntru_deg - 1
   w[0] = 1
-  for (i = 0; i < ntru_deg; ++i) {
+  for (i = 0; i < ntru_deg; i++) {
     f[i] = 1
     g[u - i] = (a[i] ^ a[ntru_deg]) & 1
   }
   f[ntru_deg] = 1
   g[ntru_deg] = 0
-  for (j = 0, l = 2 * ntru_deg - 1; j < l; ++j) {
-    for (i = ntru_deg; i > 0; --i) {
+  for (j = 0, l = ntru_deg * 2 - 1; j < l; j++) {
+    for (i = ntru_deg; i > 0; i--) {
       v[i] = v[i - 1]
     }
     v[0] = 0
-    h = int16_t(g[0] & f[0])
-    k = both_negative_mask(-d, -int16_t(g[0]))
-    d = int16_t(d ^ (k & (d ^ -d)))
-    d = int16_t(d + 1)
-    for (i = 0; i < ntru_n; ++i) {
-      t = int16_t(k & (f[i] ^ g[i]))
+    e = both_negative_mask(-d, -g[0])
+    h = g[0] & f[0]
+    d = (d ^ (e & (d ^ -d))) + 1
+    for (i = 0; i < ntru_n; i++) {
+      t = int16_t(e & (f[i] ^ g[i]))
       f[i] ^= t
       g[i] ^= t
-      t = int16_t(k & (v[i] ^ w[i]))
+      t = int16_t(e & (v[i] ^ w[i]))
       v[i] ^= t
       w[i] ^= t
       g[i] ^= h & f[i]
       w[i] ^= h & v[i]
     }
-    for (i = 0; i < ntru_deg; ++i) {
-      g[i] = g[i + 1]
+    for (i = 0; i < ntru_deg;) {
+      g[i] = g[++i]
     }
     g[ntru_deg] = 0
   }
-  for (i = 0; i < ntru_deg; ++i) {
+  for (i = 0; i < ntru_deg; i++) {
     r[i] = v[u - i]
   }
   r[ntru_deg] = 0
@@ -121,48 +120,47 @@ function poly_r2_inv (r, a) {
 
 function uint8_mod3 (a) {
   a = uint8_t(a)
-  a = uint8_t((a >> 2) + (a & 3))
-  const t = int16_t(a - 3)
-  const c = int16_t(t >> 5)
+  a = (a >> 2) + (a & 3)
+  const t = a - 3
+  const c = t >> 5
   return uint8_t(t ^ (c & (a ^ t)))
 }
 
 function poly_s3_inv (r, a) {
   const f = poly(), g = poly(), v = poly(), w = poly()
-  let d = 1, h, i, j, k, t, u = ntru_n - 2
+  let d = 1, e, h, i, j, l, t, u = ntru_deg - 1
   w[0] = 1
-  for (i = 0; i < ntru_deg; ++i) {
+  for (i = 0; i < ntru_deg; i++) {
     f[i] = 1
-    g[u - i] = uint8_mod3((a[i] & 3) + 2 * (a[ntru_deg] & 3))
+    g[u - i] = uint8_mod3((a[i] & 3) + (a[ntru_deg] & 3) * 2)
   }
   f[ntru_deg] = 1
   g[ntru_deg] = 0
-  for (j = 0, l = 2 * ntru_deg - 1; j < l; ++j) {
-    for (i = ntru_deg; i > 0; --i) {
+  for (j = 0, l = ntru_deg * 2 - 1; j < l; j++) {
+    for (i = ntru_deg; i > 0; i--) {
       v[i] = v[i - 1]
     }
     v[0] = 0
-    h = int16_t(uint8_mod3(2 * g[0] * f[0]))
-    k = both_negative_mask(-d, -int16_t(g[0]))
-    d = int16_t(d ^ (k & (d ^ -d)))
-    d = int16_t(d + 1)
-    for (i = 0; i < ntru_n; ++i) {
-      t = int16_t(k & (f[i] ^ g[i]))
+    e = both_negative_mask(-d, -g[0])
+    h = uint8_mod3(f[0] * g[0] * 2)
+    d = (d ^ (e & (d ^ -d))) + 1
+    for (i = 0; i < ntru_n; i++) {
+      t = int16_t(e & (f[i] ^ g[i]))
       f[i] ^= t
       g[i] ^= t
-      t = int16_t(k & (v[i] ^ w[i]))
+      t = int16_t(e & (v[i] ^ w[i]))
       v[i] ^= t
       w[i] ^= t
       g[i] = uint8_mod3(g[i] + h * f[i])
       w[i] = uint8_mod3(w[i] + h * v[i])
     }
-    for (i = 0; i < ntru_deg; ++i) {
-      g[i] = g[i + 1]
+    for (i = 0; i < ntru_deg;) {
+      g[i] = g[++i]
     }
     g[ntru_deg] = 0
   }
   h = f[0]
-  for (i = 0; i < ntru_deg; ++i) {
+  for (i = 0; i < ntru_deg; i++) {
     r[i] = uint8_mod3(h * v[u - i])
   }
   r[ntru_deg] = 0
@@ -187,14 +185,14 @@ function uint16_mod3 (a) {
   r[0] = (r[0] >> 4) + (r[0] & 15)
   r[0] = (r[0] >> 2) + (r[0] & 3)
   r[0] = (r[0] >> 2) + (r[0] & 3)
-  const t = int16_t(r[0] - 3)
-  const c = int16_t(t >> 15)
+  const t = r[0] - 3
+  const c = t >> 15
   return uint16_t((c & r[0]) ^ (~c & t))
 }
 
 function poly_mod_3_phi_n (r) {
   for (let i = 0; i < ntru_n; i++) {
-    r[i] = uint16_mod3(r[i] + 2 * r[ntru_deg])
+    r[i] = uint16_mod3(r[i] + r[ntru_deg] * 2)
   }
 }
 
@@ -251,19 +249,20 @@ function poly_rq_inv (r, a) {
 
 function sample_iid (r, b, bi=0) {
   for (let i = 0; i < ntru_deg; i++) {
-    r[i] = uint16_mod3(b[i + bi])
+    r[i] = uint16_mod3(b[bi + i])
   }
   r[ntru_deg] = 0
 }
 
 function sample_iid_plus (r, a, ri=0) {
   sample_iid(r, a, ri)
-  let i, s = uint16(0)
+  let i
+  const s = uint16(1)
   for (i = 0; i < ntru_deg; i++) {
     r[i] |= -(r[i] >> 1)
   }
-  for (i = 0; i < ntru_deg; i++) {
-    s[0] += r[i + 1] * r[i]
+  for (i = 0; i < ntru_deg;) {
+    s[0] += r[i++] + r[i]
   }
   s[0] = 1 | -(s[0] >> 15)
   for (i = 0; i < ntru_n; i += 2) {
@@ -291,20 +290,20 @@ function poly_lift (r, a) {
   b[0] = a[0] + a[2]
   b[1] = a[1]
   b[2] = a[2]
-  let i, j = 0, k
-  for (i = 3; i < ntru_n; i++) {
+  let i, j, k
+  for (i = 3, j = 0; i < ntru_n; i++) {
     k = a[i]
-    b[0] += k * (j + 2)
-    b[1] += k * (j + 1)
-    b[2] += k * j
+    b[0] += (j + 2) * k
+    b[1] += (j + 1) * k
+    b[2] += j * k
     j = (j + 1) % 3
   }
-  k = j + 1
-  b[1] += a[0] * k
+  i = j + 1
+  b[1] += a[0] * i
   b[2] += a[0] * j
-  b[2] += a[1] * k
+  b[2] += a[1] * i
   for (i = 3; i < ntru_n; i++) {
-    b[i] = b[i - 3] + 2 * (a[i] + a[i - 1] + a[i - 2])
+    b[i] = (a[i] + a[i - 1] + a[i - 2]) * 2 + b[i - 3]
   }
   poly_mod_3_phi_n(b)
   poly_z3_to_zq(b)
@@ -319,16 +318,16 @@ function poly_s3_tobytes (m, a, mi=0) {
   for (let b, i = 0, j; i < ntru_deg5; i++) {
     j = i * 5
     b = a[j + 4] & 255
-    b = (3 * b + a[j + 3]) & 255
-    b = (3 * b + a[j + 2]) & 255
-    b = (3 * b + a[j + 1]) & 255
-    m[i + mi] = (3 * b + a[j]) & 255
+    b = (b * 3 + a[j + 3]) & 255
+    b = (b * 3 + a[j + 2]) & 255
+    b = (b * 3 + a[j + 1]) & 255
+    m[mi + i] = (b * 3 + a[j]) & 255
   }
 }
 
 function poly_s3_frombytes (r, m, mi=0) {
   for (let c, i = 0, j; i < ntru_deg5; i++) {
-    c = m[i + mi]
+    c = m[mi + i]
     j = i * 5
     r[j] = c
     r[j + 1] = c * 171 >> 9
@@ -341,71 +340,72 @@ function poly_s3_frombytes (r, m, mi=0) {
 }
 
 function poly_sq_tobytes (r, a, ri=0) {
+  let i, j, k
   const t = uint16(8)
-  let i, j
-  for (i = 0; i < ntru_deg8; i++) {
+  for (i = 0; i < ntru_deg; i += 8) {
     for (j = 0; j < 8; j++) {
-      t[j] = modq(a[8 * i + j])
+      t[j] = modq(a[i + j])
     }
-    j = i * 13 + ri
-    r[j] = t[0] & 255
-    r[j + 1] = (t[0] >> 8) | ((t[1] & 7) << 5)
-    r[j + 2] = (t[1] >> 3) & 255
-    r[j + 3] = (t[1] >> 11) | ((t[2] & 63) << 2)
-    r[j + 4] = (t[2] >> 6) | ((t[3] & 1) << 7)
-    r[j + 5] = (t[3] >> 1) & 255
-    r[j + 6] = (t[3] >> 9) | ((t[4] & 15) << 4)
-    r[j + 7] = (t[4] >> 4) & 255
-    r[j + 8] = (t[4] >> 12) | ((t[5] & 127) << 1)
-    r[j + 9] = (t[5] >> 7) | ((t[6] & 3) << 6)
-    r[j + 10] = (t[6] >> 2) & 255
-    r[j + 11] = (t[6] >> 10) | ((t[7] & 31) << 3)
-    r[j + 12] = t[7] >> 5
+    j = 0
+    k = ri + i * 13 / 8
+    r[k] = t[j] & 255
+    r[k + 1] = (t[j++] >> 8) | ((t[j] & 7) << 5)
+    r[k + 2] = (t[j] >> 3) & 255
+    r[k + 3] = (t[j++] >> 11) | ((t[j] & 63) << 2)
+    r[k + 4] = (t[j++] >> 6) | ((t[j] & 1) << 7)
+    r[k + 5] = (t[j] >> 1) & 255
+    r[k + 6] = (t[j++] >> 9) | ((t[j] & 15) << 4)
+    r[k + 7] = (t[j] >> 4) & 255
+    r[k + 8] = (t[j++] >> 12) | ((t[j] & 127) << 1)
+    r[k + 9] = (t[j++] >> 7) | ((t[j] & 3) << 6)
+    r[k + 10] = (t[j] >> 2) & 255
+    r[k + 11] = (t[j++] >> 10) | ((t[j] & 31) << 3)
+    r[k + 12] = t[j] >> 5
   }
-  for (j = ntru_deg - 8 * i; j < 8; j++) {
+  for (j = ntru_deg - i * 8; j < 8; j++) {
     t[j] = 0
   }
-  i = ntru_deg - 8 * uint16_t(ntru_deg8)
-  j = (ntru_deg8 - 1) * 13
+  i = ntru_deg - uint16_t(ntru_deg8) * 8
+  j = 0
+  k = (ntru_deg8 - 1) * 13
   if (i == 4) {
-    r[j] = t[0] & 255
-    r[j + 1] = (t[0] >> 8) | ((t[1] & 7) << 5)
-    r[j + 2] = (t[1] >> 3) & 255
-    r[j + 3] = (t[1] >> 11) | ((t[2] & 63) << 2)
-    r[j + 4] = (t[2] >> 6) | ((t[3] & 1) << 7)
-    r[j + 5] = (t[3] >> 1) & 255
-    r[j + 6] = (t[3] >> 9) | ((t[4] & 15) << 4)
+    r[k] = t[j] & 255
+    r[k + 1] = (t[j++] >> 8) | ((t[j] & 7) << 5)
+    r[k + 2] = (t[j] >> 3) & 255
+    r[k + 3] = (t[j++] >> 11) | ((t[j] & 63) << 2)
+    r[k + 4] = (t[j++] >> 6) | ((t[j] & 1) << 7)
+    r[k + 5] = (t[j] >> 1) & 255
+    r[k + 6] = (t[j++] >> 9) | ((t[j] & 15) << 4)
   } else if (i == 2) {
-    r[j] = t[0] & 255
-    r[j + 1] = (t[0] >> 8) | ((t[1] & 7) << 5)
-    r[j + 2] = (t[1] >> 3) & 255
-    r[j + 3] = (t[1] >> 11) | ((t[2] & 63) << 2)
+    r[k] = t[j] & 255
+    r[k + 1] = (t[j++] >> 8) | ((t[j] & 7) << 5)
+    r[k + 2] = (t[j] >> 3) & 255
+    r[k + 3] = (t[j++] >> 11) | ((t[j] & 63) << 2)
   }
 }
 
-function poly_sq_frombytes (r, a, k=0) {
+function poly_sq_frombytes (r, a, ai=0) {
   let i, j
-  for (i = 0; i < ntru_deg8; i++) {
-    j = i * 8
-    r[j] = a[k++] | ((uint16_t(a[k]) & 31) << 8)
-    r[j + 1] = (a[k++] >> 5) | (uint16_t(a[k++]) << 3) | ((uint16_t(a[k]) & 3) << 11)
-    r[j + 2] = (a[k++] >> 2) | ((uint16_t(a[k]) & 127) << 6)
-    r[j + 3] = (a[k++] >> 7) | (uint16_t(a[k++]) << 1) | ((uint16_t(a[k]) & 15) << 9)
-    r[j + 4] = (a[k++] >> 4) | (uint16_t(a[k++]) << 4) | ((uint16_t(a[k]) & 1) << 12)
-    r[j + 5] = (a[k++] >> 1) | ((uint16_t(a[k]) & 63) << 7)
-    r[j + 6] = (a[k++] >> 6) | (uint16_t(a[k++]) << 2) | ((uint16_t(a[k]) & 7) << 10)
-    r[j + 7] = (a[k++] >> 3) | (uint16_t(a[k++]) << 5)
+  for (i = 0; i < ntru_deg; i += 8) {
+    r[i] = a[ai++] | ((a[ai] & 31) << 8)
+    r[i + 1] = (a[ai++] >> 5) | (a[ai++] << 3) | ((a[ai] & 3) << 11)
+    r[i + 2] = (a[ai++] >> 2) | ((a[ai] & 127) << 6)
+    r[i + 3] = (a[ai++] >> 7) | (a[ai++] << 1) | ((a[ai] & 15) << 9)
+    r[i + 4] = (a[ai++] >> 4) | (a[ai++] << 4) | ((a[ai] & 1) << 12)
+    r[i + 5] = (a[ai++] >> 1) | ((a[ai] & 63) << 7)
+    r[i + 6] = (a[ai++] >> 6) | (a[ai++] << 2) | ((a[ai] & 7) << 10)
+    r[i + 7] = (a[ai++] >> 3) | (a[ai++] << 5)
   }
-  k -= 13
-  i = ntru_deg & 7
-  if (i == 4) {
-    r[j] = a[k++] | ((uint16_t(a[k]) & 31) << 8)
-    r[j + 1] = (a[k++] >> 5) | (uint16_t(a[k++]) << 3) | ((uint16_t(a[k]) & 3) << 11)
-    r[j + 2] = (a[k++] >> 2) | ((uint16_t(a[k]) & 127) << 6)
-    r[j + 3] = (a[k++] >> 7) | (uint16_t(a[k++]) << 1) | ((uint16_t(a[k]) & 15) << 9)
-  } else if (i == 2) {
-    r[j] = a[k++] | ((uint16_t(a[k]) & 31) << 8)
-    r[j + 1] = (a[k++] >> 5) | (uint16_t(a[k++]) << 3) | ((uint16_t(a[k]) & 3) << 11)
+  ai -= 13
+  j = ntru_deg & 7
+  if (j == 4) {
+    r[i] = a[ai++] | ((a[ai] & 31) << 8)
+    r[i + 1] = (a[ai++] >> 5) | (a[ai++] << 3) | ((a[ai] & 3) << 11)
+    r[i + 2] = (a[ai++] >> 2) | ((a[ai] & 127) << 6)
+    r[i + 3] = (a[ai++] >> 7) | (a[ai++] << 1) | ((a[ai] & 15) << 9)
+  } else if (j == 2) {
+    r[i] = a[ai++] | ((a[ai] & 31) << 8)
+    r[i + 1] = (a[ai++] >> 5) | (a[ai++] << 3) | ((a[ai] & 3) << 11)
   }
   r[ntru_deg] = 0
 }
@@ -419,7 +419,7 @@ function poly_rq_sum_zero_frombytes (r, a) {
 
 function keypair (p, s) {
   const f = poly(), g = poly(), i = poly(), t = poly(), x = poly()
-  const gf = x, h = x, j = x, k = x
+  const e = x, h = x, j = x, k = x
   sample_fg(f, g)
   poly_s3_inv(k, f)
   poly_s3_tobytes(s, f)
@@ -427,11 +427,11 @@ function keypair (p, s) {
   poly_z3_to_zq(f)
   poly_z3_to_zq(g)
   for (let i = ntru_deg; i > 0; i--) {
-    g[i] = 3 * (g[i - 1] - g[i])
+    g[i] = (g[i - 1] - g[i]) * 3
   }
   g[0] *= -3
-  poly_rq_mul(gf, g, f)
-  poly_rq_inv(i, gf)
+  poly_rq_mul(e, g, f)
+  poly_rq_inv(i, e)
   poly_rq_mul(t, i, f)
   poly_sq_mul(j, t, f)
   poly_sq_tobytes(s, j, private_bytes)
@@ -454,18 +454,18 @@ function encrypts (c, r, y, p) {
 
 function decrypts (t, o, s) {
   const x1 = poly(), x2 = poly(), x3 = poly(), x4 = poly()
-  const b = x1, c = x1, cf = x3, f = x2, i = x3, j = x3, l = x2, m = x4, mf = x2, r = x4
+  const b = x1, c = x1, d = x2, e = x2, f = x2, g = x3, i = x3, j = x3, m = x4, r = x4
   poly_rq_sum_zero_frombytes(c, t)
   poly_s3_frombytes(f, s)
   poly_z3_to_zq(f)
-  poly_rq_mul(cf, c, f)
-  poly_rq_to_s3(mf, cf)
+  poly_rq_mul(g, c, f)
+  poly_rq_to_s3(e, g)
   poly_s3_frombytes(i, s, trinary_bytes)
-  poly_s3_mul(m, mf, i)
+  poly_s3_mul(m, e, i)
   poly_s3_tobytes(o, m, trinary_bytes)
-  poly_lift(l, m)
+  poly_lift(d, m)
   for (let i = 0; i < ntru_n; i++) {
-    b[i] = c[i] - l[i]
+    b[i] = c[i] - d[i]
   }
   poly_sq_frombytes(j, s, private_bytes)
   poly_sq_mul(r, b, j)
@@ -586,7 +586,7 @@ function expand (a, g=a0, h=a1) {
   return a
 }
 
-function reduce (a, h=a1) {
+function reduces (a, h=a1) {
   while (a.length > a128) {
     a = [...expand(a.slice(a0, a128), a0, a64), ...a.slice(a128)]
   }
@@ -603,7 +603,7 @@ function crypto_kem_enc (c, k, p) {
   const o = uint8(private_bytes)
   poly_s3_tobytes(o, r)
   poly_s3_tobytes(o, y, trinary_bytes)
-  k.set(reduce(o, 32))
+  k.set(reduces(o, shared_bytes))
   poly_z3_to_zq(r)
   encrypts(c, r, y, p)
 }
@@ -611,7 +611,7 @@ function crypto_kem_enc (c, k, p) {
 function crypto_kem_dec (k, c, s) {
   const o = uint8(private_bytes)
   decrypts(c, o, s)
-  k.set(reduce(o, 32))
+  k.set(reduces(o, shared_bytes))
 }
 
 priv = uint8(secret_bytes)
